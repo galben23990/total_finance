@@ -1,3 +1,9 @@
+import openai 
+from utiltes import *
+from config import *
+import streamlit as st
+ 
+
 
 def get_titles_and_subtitles_by_topic(topic,file_path='articles_with_content.json'):
     # Dictionary to hold the titles and subtitles with index
@@ -27,40 +33,9 @@ def get_titles_and_subtitles_by_topic(topic,file_path='articles_with_content.jso
 
     return indexed_titles_and_subtitles,articles_data
 
-def create_article_medium(selected_topic,user_persona,special_instruction,file_path='articles_with_content.json'):
-    selected_topic=selected_topic.lower()
-    indexed_titles_subtitles, articles_data = get_titles_and_subtitles_by_topic(selected_topic,file_path)
-    massage_history = [{"role": "system",
-                        "content": """You choose the 3 most relevant article index based on user special instruction,you output is a json file the key name is chosen_articles and the value is a list of 3 indexes for example output should be {"chosen_articles":[1,7,5]}"""},
-                       {"role": "user",
-                        "content": f"User_Special_instruction: {special_instruction}\n\n Indexed Data:\n{indexed_titles_subtitles}"}]
-
-    # Print or process the indexed titles and subtitles as needed
-    print(indexed_titles_subtitles)
-    chosen_articles = ask_gpt(massage_history)
-    chosen_articles = json.loads(chosen_articles)  # Use json.loads for a string
-    text_list = []
-    for i,article_number in enumerate(chosen_articles["chosen_articles"]):
-        text = f"ARTICLE {i}\n" + articles_data[article_number]["content"]
-        text_list.append(text)
-    articles="\n\n\n".join(text_list)
-    print(text_list)
-
-    system_massage_medium_writer = """Name:Personalized Medium Article Creator
-    Description:I craft unique, engaging Medium articles based on your persona and favorite styles and articles provided
-    Instruction:As the Engaging Article Transformer, your role is to create unique, engaging, and long Medium articles based on a user's preferences and persona. You will receive three relevant articles that the user likes for their content and style of writing, along with a user persona detailing their style and preferences,and special instructions. Your goal is to synthesize these inputs into a single, cohesive,uniqe and interesting Medium article that reflects the user's persona and incorporates ideas and styles from the provided articles. Maintain a balance of professionalism, information, and creativity. Ensure that the final product is a reflection of the user's personal style and the essence of the articles provided, resulting in a piece that stands out on Medium for its uniqueness and engagement but in a clear, straightforward manner, making it accessible to a broader audience.The languge shouldnt be with "high" language use evreyday language but keep it proffesinal make sure the end article is a long one"""
-    massage_history_article = [{"role": "system","content": system_massage_medium_writer},
-                               {"role": "user","content": articles},
-                               {"role": "user", "content": str(user_persona)},
-                               {"role": "user", "content": special_instruction+ "\n please dont use complicted words"}]
-
-    final_article = ask_gpt(massage_history_article, model="gpt-4-1106-preview", max_tokens=3500, temperature=1,return_str=True, response_format={"type": "text"})
-    print(final_article)
-    return final_article
 
 
 def choose_content(selected_topic,special_instruction,file_path='articles_with_content.json'):
-    selected_topic = selected_topic.lower()
     indexed_titles_subtitles, articles_data = get_titles_and_subtitles_by_topic(selected_topic, file_path)
     massage_history = [{"role": "system",
                         "content": """You choose the 3 most relevant article index based on user special instruction,you output is a json file the key name is chosen_articles and the value is a list of 3 indexes for example output should be {"chosen_articles":[1,7,5]}"""},
@@ -68,26 +43,60 @@ def choose_content(selected_topic,special_instruction,file_path='articles_with_c
                         "content": f"selected_topic:{selected_topic},User_Special_instruction: {special_instruction}\n\n Indexed Data:\n{indexed_titles_subtitles}"}]
 
     # Print or process the indexed titles and subtitles as needed
-    print(indexed_titles_subtitles)
     chosen_articles = ask_gpt(massage_history)
-    return chosen_articles,articles_data
+    
+    chosen_articles_json = json.loads(chosen_articles)
+    article_indexes=chosen_articles_json["chosen_articles"]
+    # Transform the chosen articles into the desired data structure
+    structured_data = []
+    for index in article_indexes:
+        article = articles_data[index]
+        structured_data.append({
+            "Headline": article.get("title", "N/A"),
+            "Summary": article.get("subtitle", "N/A"),
+            # Replace with the actual URL of the article
+            "Link": f"[Read More](https://medium.com/{article.get('link', 'your-article-link')})"
+        })
+    return chosen_articles,articles_data, structured_data
+
 def create_content(selected_topic,user_persona,special_instruction,file_path='articles_with_content.json',type="medium"):
-    chosen_articles,articles_data=choose_content(selected_topic,special_instruction,file_path)
-    chosen_articles = json.loads(chosen_articles)  # Use json.loads for a string
+    chosen_articles,articles_data,article_df=choose_content(selected_topic,special_instruction,file_path)
     text_list = []
     for i,article_number in enumerate(chosen_articles["chosen_articles"]):
         text = f"ARTICLE {i}\n" + articles_data[article_number]["content"]
         text_list.append(text)
     articles="\n\n\n".join(text_list)
     print(text_list)
-    system=content_system_massage[type]
-    massage_history_article = [{"role": "system","content": system},
+    #system=content_system_massage[type]
+    massage_history_article = [
                                {"role": "user","content": articles},
                                {"role": "user", "content": str(user_persona)},
                                {"role": "user", "content": special_instruction+ "\n please dont use complicted words"}]
 
     final_article = ask_gpt(massage_history_article, model="gpt-4-1106-preview", max_tokens=3500, temperature=1,return_str=True)
     return json.loads(final_article)
+
+def create_content_chat(selected_topic,user_persona,special_instruction,file_path='articles_with_content.json',type="medium",from_url=False,url_contnet=""):
+    if from_url:
+        articles=url_contnet
+        chosen_articles,articles_data,article_df=choose_content(selected_topic,special_instruction,file_path)
+    else:
+        chosen_articles,articles_data,article_df=choose_content(selected_topic,special_instruction,file_path)
+        text_list = []
+        chosen_articles=json.loads(chosen_articles)
+
+        for i,article_number in enumerate(chosen_articles["chosen_articles"]):
+            text = f"ARTICLE {i}\n" + articles_data[article_number]["content"]
+            text_list.append(text)
+        articles="\n\n\n".join(text_list)
+        print(text_list)
+        #system=content_system_massage[type]
+    massage_history_article = [
+                               {"role": "user","content": f"**CHOOSEN ARTICLES**\n{articles}"},
+                               {"role": "user", "content": f"**USER PERSONA**\n{str(user_persona)}"},
+                               {"role": "user", "content": f"**USER SPECIAL INSTRUCTION**\n{special_instruction}"},
+                               {"role": "user","content":f"**CHOOSEN TYPE OF PLATFORM**\n{type}"}]
+    return massage_history_article,article_df
 
 
 
@@ -169,6 +178,15 @@ if __name__ == "__main__":
     file_path = 'articles_with_content.json'  # File path to the JSON file
     content=create_content(selected_topic,user_persona,special_instruction,file_path,type=content_type)
     print(content)
+
+
+
+
+
+
+
+
+
 
 
 

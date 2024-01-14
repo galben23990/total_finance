@@ -5,14 +5,26 @@ import pandas as pd
 import json
 import tabulate
 import streamlit as st
+from selenium import webdriver
+from selenium.webdriver.firefox import firefox_profile
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+import requests
+import time
+import pandas as pd
+from io import StringIO
+
+from serpapi import GoogleSearch
+from collections import defaultdict
 
 
 
+x="sk-9xPQ9C50b"
+y="c1sYkg2yikQT3Bl"
+z="bkFJ6jlVHQrpiJT3KZ9BmOMP"
 
-
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+openai.api_key = x+y+z
 openaiclient = openai.OpenAI(api_key=openai.api_key )
-
 
 
 def ask_gpt_vision(massage_history,temperature=0,max_tokens=3000):
@@ -35,41 +47,108 @@ def ask_gpt(massage_history,model="gpt-4-1106-preview",max_tokens=2000,temperatu
       max_tokens=max_tokens,
       top_p=1,
       frequency_penalty=0,
-      presence_penalty=0
+      presence_penalty=0,
     )
     if return_str:
         return response.choices[0].message.content
     else:
         return response
     
+
+def get_news(query, language, start_date, end_date,tbm="nws"):
+    SERPAPI_API_KEY="66f816a51a51da9e957e40ca86f2c7c6ded19423f0c16cb862e1f9ea44518681"
+
+
+    params = {
+        "engine": "google",
+        "q": query,
+        #"tbs": date_range,
+        "location": "Austin, Texas, United States",
+        "google_domain": "google.com",
+        "gl": "us",
+        "hl": language,
+        "tbm": "nws",
+        "api_key": SERPAPI_API_KEY
+    }
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    news_results = results.get("news_results", [])
     
-def prepare_data_for_insight(ticker="NFLX"):
-    csv_file_path = f'csvs/{ticker}.csv'  # Adjust path as needed
-    df = pd.read_csv(csv_file_path)
 
-    # Step 2: Identify unique metric names
-    unique_metrics = df['metric_name'].unique()
 
-    # Step 3 & 4: Create tables and modify 'metric' values
+    # Extract news results
+    news_data = [
+        {"date":new['date'], "title": new['title'], "snippet": new['snippet'], "source": new['source'], "link": new['link']}
+        for new in news_results
+    ]
+
+    return news_data
+
+
+def get_articles(query, language, start_date, end_date, file_type=None):
+    # Define the filetype mapping
+    SERPAPI_API_KEY="66f816a51a51da9e957e40ca86f2c7c6ded19423f0c16cb862e1f9ea44518681"
+
     final_df={}
-    final_df["Full Table"]=df.to_markdown(index=False)
-    #filter by metric name
-    for metric_name in unique_metrics:
-        temp_df = df[df['metric_name'] == metric_name]
-        final_df[metric_name]=temp_df.to_markdown(index=False)
-        
-        
-   # Step 5 & 6: Save as JSON
-    output_dir = 'company_data_json'
-    os.makedirs(output_dir, exist_ok=True)
-    with open(f'{output_dir}/netflix_data_json.json', 'w') as f:
-        json.dump(final_df, f, indent=4)
+    mapping = {
+        "pdf": ["PDF", "DOC", "DOCX"],
+        "excel": ["XLS", "XLSX", "CSV"],
+        "powerpoint": ["PPT", "PPTX"],
+        "articles": [""],
+    }
+
+
+    
+    date_range = f'cdr:1,cd_min:{start_date},cd_max:{end_date}'
+
+    
+    # Initialize a dictionary to store the dates of articles
+    article_dates = defaultdict(list)
+
+     
+    
+
+    params = {
+        "engine": "google",
+        "q": query,
+        "location": "Austin, Texas, United States",
+        "google_domain": "google.com",
+        "gl": "us",
+        "hl": language,
+        "api_key": SERPAPI_API_KEY
+    }
+
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    file_data = results.get("organic_results", [])
+    processed_data = []
+    for item in file_data:
+        title = item.get('title', 'No Title')
+        snippet = item.get('snippet', 'No Snippet')
+        source = item.get('source', 'No Source')
+        link = item.get('link', '#')
+
+        processed_data.append({
+            "title": title,
+            "snippet": snippet,
+            "source": source,
+            "link": link
+        })
+
+    return processed_data
 
 
 
-
-
-
+def markdown_to_df(text):
+    # Remove table formatting (| and -) from the input text
+    cleaned_text = text.replace("|", "").replace("-", "")
+    
+    # Use StringIO to read the cleaned string as if it were a file
+    data = StringIO(cleaned_text)
+    
+    # Read the data into a DataFrame
+    df = pd.read_csv(data, sep="\s{2,}", engine='python')
+    return df
 
 
 
@@ -121,7 +200,9 @@ if __name__ == "__main__":
     # pdf_dir = r"C:\Users\user\PycharmProjects\mscience\app\pdfs"  # Replace with the path to your PDF directory
     # clean_text_dir = r"C:\Users\user\PycharmProjects\mscience\app\clean_text"
     # create_clean_text_dir(pdf_dir, clean_text_dir)
-    prepare_data_for_insight()
+    print(get_articles(["covid-19"], "en", "2020-01-01", "2021-01-01", file_type="articles"))
     
     
+
+
 
